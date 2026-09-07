@@ -1,31 +1,60 @@
 name: Aggiorna archivio AIFA
+
 on:
   workflow_dispatch:
   schedule:
-    - cron: '17 3 * * 1'
+    - cron: "17 3 * * 1"
+
 permissions:
   contents: write
   pages: write
   id-token: write
+
+concurrency:
+  group: aifa-catalog-update
+  cancel-in-progress: false
+
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
-          python-version: '3.12'
+          fetch-depth: 0
+
+      - name: Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
       - name: Genera archivio
         run: python scripts/build_aifa.py
-      - name: Commit dati
+
+      - name: Commit dati aggiornati
         run: |
-          git config user.name 'github-actions[bot]'
-          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
           git add public
-          git diff --cached --quiet || git commit -m 'data: update AIFA catalog'
-          git push
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
+
+          if git diff --cached --quiet; then
+            echo "Nessun aggiornamento AIFA da pubblicare."
+          else
+            git commit -m "data: update AIFA catalog"
+
+            git pull --rebase origin main
+            git push origin HEAD:main
+          fi
+
+      - name: Configura Pages
+        uses: actions/configure-pages@v5
+
+      - name: Carica artifact Pages
+        uses: actions/upload-pages-artifact@v3
         with:
           path: public
-      - uses: actions/deploy-pages@v4
+
+      - name: Pubblica Pages
+        uses: actions/deploy-pages@v4
