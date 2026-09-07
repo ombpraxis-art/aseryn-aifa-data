@@ -103,6 +103,64 @@ def shard_key(name):
 
     return "".join(encode_char(c) for c in chars)
 
+def infer_unit_from_form(pharmaceutical_form):
+    form = norm(pharmaceutical_form)
+
+    if "compress" in form:
+        return "compresse"
+    if "capsul" in form:
+        return "capsule"
+    if "bustin" in form:
+        return "bustine"
+    if "fiala" in form:
+        return "fiale"
+    if "flacon" in form:
+        return "flaconi"
+    if "penna" in form:
+        return "penne"
+    if "cerott" in form:
+        return "cerotti"
+    if "suppost" in form:
+        return "supposte"
+    if "ovul" in form:
+        return "ovuli"
+    if "siring" in form:
+        return "siringhe"
+
+    return None
+
+def infer_package_info(description, pharmaceutical_form):
+    if not description:
+        return None, infer_unit_from_form(pharmaceutical_form)
+
+    text = norm(description)
+
+    patterns = [
+        (r"\b(\d+)\s*(?:x\s*1\s*)?(?:compresse|compressa|cpr)\b", "compresse"),
+        (r"\b(\d+)\s+(?:capsule|capsula|cps)\b", "capsule"),
+        (r"\b(\d+)\s+(?:bustine|bustina)\b", "bustine"),
+        (r"\b(\d+)\s+(?:fiale|fiala)\b", "fiale"),
+        (r"\b(\d+)\s+(?:flaconi|flacone)\b", "flaconi"),
+        (r"\b(\d+)\s+(?:penne|penna)\b", "penne"),
+        (r"\b(\d+)\s+(?:cerotti|cerotto)\b", "cerotti"),
+        (r"\b(\d+)\s+(?:supposte|supposta)\b", "supposte"),
+        (r"\b(\d+)\s+(?:ovuli|ovulo)\b", "ovuli"),
+        (r"\b(\d+)\s+(?:siringhe|siringa)\b", "siringhe"),
+    ]
+
+    for pattern, unit in patterns:
+        match = re.search(pattern, text, re.IGNORECASE)
+
+        if not match:
+            continue
+
+        quantity = int(match.group(1))
+
+        if quantity > 0:
+            return quantity, unit
+
+    return None, infer_unit_from_form(pharmaceutical_form)
+
 def main():
     PUBLIC.mkdir(exist_ok=True)
     SHARDS.mkdir(parents=True, exist_ok=True)
@@ -166,6 +224,13 @@ def main():
 
         # Importante: niente search_text ridondante.
         # Il client lo calcola in memoria; così gli shard pesano molto meno.
+        description = first(row, "DESCRIZIONE")
+        pharmaceutical_form = first(row, "FORMA")
+        package_quantity, package_unit = infer_package_info(
+            description,
+            pharmaceutical_form,
+        )
+
         item = {
             "aic_code": aic,
             "name": name,
@@ -176,11 +241,13 @@ def main():
                 " + ".join(strengths)
                 or None,
             "pharmaceutical_form":
-                first(row, "FORMA"),
+                pharmaceutical_form,
             "package_description":
-                first(row, "DESCRIZIONE"),
-            "package_quantity": None,
-            "package_unit": None,
+                description,
+            "package_quantity":
+                package_quantity,
+            "package_unit":
+                package_unit,
             "company":
                 first(row, "RAGIONE_SOCIALE"),
             "administrative_status":
@@ -221,7 +288,7 @@ def main():
         "version": now[:10],
         "updated_at": now,
         "row_count": count,
-        "shard_strategy": "first_three_name_characters",
+        "shard_strategy": "first_three_name_characters_with_package_info",
         "shard_count": len(shards),
     }
 
