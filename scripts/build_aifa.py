@@ -19,7 +19,7 @@ SHARDS = PUBLIC / "shards"
 def download(url):
     req = urllib.request.Request(
         url,
-        headers={"User-Agent": "ASERYN-AIFA-Builder/2.0"},
+        headers={"User-Agent": "ASERYN-AIFA-Builder/3.0"},
     )
     with urllib.request.urlopen(req, timeout=120) as response:
         raw = response.read()
@@ -93,19 +93,15 @@ def encode_char(char):
     return "_"
 
 def shard_key(name):
-    compact = re.sub(
-        r"\s+",
-        "",
-        norm(name),
-    )
+    compacted = re.sub(r"\s+", "", norm(name))
 
-    first_char = compact[0] if len(compact) > 0 else "_"
-    second_char = compact[1] if len(compact) > 1 else "_"
+    chars = [
+        compacted[0] if len(compacted) > 0 else "_",
+        compacted[1] if len(compacted) > 1 else "_",
+        compacted[2] if len(compacted) > 2 else "_",
+    ]
 
-    return (
-        encode_char(first_char) +
-        encode_char(second_char)
-    )
+    return "".join(encode_char(c) for c in chars)
 
 def main():
     PUBLIC.mkdir(exist_ok=True)
@@ -128,15 +124,8 @@ def main():
             "PA",
         )
 
-        qty = first(
-            row,
-            "QUANTITA",
-        )
-
-        unit = first(
-            row,
-            "UNITA_MISURA",
-        )
+        qty = first(row, "QUANTITA")
+        unit = first(row, "UNITA_MISURA")
 
         if ingredient:
             active_by_aic[aic].append({
@@ -157,7 +146,6 @@ def main():
             continue
 
         active_rows = active_by_aic.get(aic, [])
-
         ingredients = []
         strengths = []
 
@@ -176,6 +164,8 @@ def main():
                 if strength not in strengths:
                     strengths.append(strength)
 
+        # Importante: niente search_text ridondante.
+        # Il client lo calcola in memoria; così gli shard pesano molto meno.
         item = {
             "aic_code": aic,
             "name": name,
@@ -204,20 +194,6 @@ def main():
             "imported_at": now,
         }
 
-        item["search_text"] = norm(
-            " ".join(
-                str(value)
-                for value in [
-                    item["name"],
-                    item["active_ingredient"],
-                    item["strength"],
-                    item["package_description"],
-                    item["aic_code"],
-                ]
-                if value
-            )
-        )
-
         shards[shard_key(name)].append(item)
         count += 1
 
@@ -245,7 +221,7 @@ def main():
         "version": now[:10],
         "updated_at": now,
         "row_count": count,
-        "shard_strategy": "first_two_name_characters",
+        "shard_strategy": "first_three_name_characters",
         "shard_count": len(shards),
     }
 
